@@ -1,0 +1,404 @@
+
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2022_conference,times}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{setspace}
+\usepackage{bm}
+\usepackage[T1]{fontenc}
+\usepackage{calligra}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode} 
+\usepackage{amsmath} 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{algorithm}% http://ctan.org/pkg/algorithm
+%\PassOptionsToPackage{noend}{algpseudocode}% comment out if want end's to show
+\usepackage{algpseudocode}% http://ctan.org/pkg/algorithmicx
+
+\errorcontextlines\maxdimen
+
+% begin vertical rule patch for algorithmicx (http://tex.stackexchange.com/questions/144840/vertical-loop-block-lines-in-algorithmicx-with-noend-option)
+\makeatletter
+% start with some helper code
+% This is the vertical rule that is inserted
+\newcommand*{\algrule}[1][\algorithmicindent]{\makebox[#1][l]{\hspace*{.5em}\thealgruleextra\vrule height \thealgruleheight depth \thealgruledepth}}%
+% its height and depth need to be adjustable
+\newcommand*{\thealgruleextra}{}
+\newcommand*{\thealgruleheight}{.75\baselineskip}
+\newcommand*{\thealgruledepth}{.25\baselineskip}
+
+\newcount\ALG@printindent@tempcnta
+\def\ALG@printindent{%
+	\ifnum \theALG@nested>0% is there anything to print
+	\ifx\ALG@text\ALG@x@notext% is this an end group without any text?
+	% do nothing
+	\else
+	\unskip
+	\addvspace{-1pt}% FUDGE to make the rules line up
+	% draw a rule for each indent level
+	\ALG@printindent@tempcnta=1
+	\loop
+	\algrule[\csname ALG@ind@\the\ALG@printindent@tempcnta\endcsname]%
+	\advance \ALG@printindent@tempcnta 1
+	\ifnum \ALG@printindent@tempcnta<\numexpr\theALG@nested+1\relax% can't do <=, so add one to RHS and use < instead
+	\repeat
+	\fi
+	\fi
+}%
+\usepackage{etoolbox}
+% the following line injects our new indent handling code in place of the default spacing
+\patchcmd{\ALG@doentity}{\noindent\hskip\ALG@tlm}{\ALG@printindent}{}{\errmessage{failed to patch}}
+\makeatother
+
+% the required height and depth are set by measuring the content to be shown
+% this means that the content is processed twice
+\newbox\statebox
+\newcommand{\myState}[1]{%
+	\setbox\statebox=\vbox{#1}%
+	\edef\thealgruleheight{\dimexpr \the\ht\statebox+1pt\relax}%
+	\edef\thealgruledepth{\dimexpr \the\dp\statebox+1pt\relax}%
+	\ifdim\thealgruleheight<.75\baselineskip
+	\def\thealgruleheight{\dimexpr .75\baselineskip+1pt\relax}%
+	\fi
+	\ifdim\thealgruledepth<.25\baselineskip
+	\def\thealgruledepth{\dimexpr .25\baselineskip+1pt\relax}%
+	\fi
+	%\showboxdepth=100
+	%\showboxbreadth=100
+	%\showbox\statebox
+	\State #1%
+	%\State \usebox\statebox
+	%\State \unvbox\statebox
+	%reset in case the next command is not wrapped in \myState
+	\def\thealgruleheight{\dimexpr .75\baselineskip+1pt\relax}%
+	\def\thealgruledepth{\dimexpr .25\baselineskip+1pt\relax}%
+}
+% end vertical rule patch for algorithmicx
+
+\title{Partial-Label Continual Learning}
+
+% Authors must not appear in the submitted version. They should be hidden
+% as long as the \iclrfinalcopy macro remains commented out below.
+% Non-anonymous submissions will be rejected without review.
+
+\author{Yuxiang Zheng \& Tongliang Liu\thanks{supervisor} \\
+University of Sydney \\
+\And
+Lei Feng\thanks{co-supervisor} \\
+Chongqing University
+}
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to \LaTeX{} to determine where to break
+% the lines. Using \AND forces a linebreak at that point. So, if \LaTeX{}
+% puts 3 of 4 authors names on the first line, and the last on the second
+% line, try using \AND instead of \And before the third author name.
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+\iclrfinalcopy % Uncomment for camera-ready version, but NOT for submission.
+\begin{document}
+
+
+\maketitle
+
+\begin{abstract}
+Continual learning (CL), a setting that continuously learns from a never-ending stream of data, is a challenging problem that allows a model to constantly update in a class incremental, or domain incremental setting.
+In the past few years, many different state-of-the-art methods and tricks with different settings and different assumptions have been introduced to address this problem. Despite each method having pushed the accuracy of CL from different perspectives, the performances are still unacceptable in practice. 
+In this work, we prospectively discuss the possibilities of extending CL in the weak-supervised learning setting. 
+Partial label learning (PLL) is a promising weak-supervised learning task that considers using data from a set of ambiguous candidate label sets rather than fully-labelled clean data. 
+We propose a partial label-based CL method that demonstrates the scalability of CL on the partial label and achieves similar performance to the supervised counterpart under a benchmark. 
+\end{abstract}
+
+\section{Introduction}
+Modern artificial intelligence is capable of performing at the human level or even better on specific tasks in many areas.\citep{AlexKrizhevsky2012ImageNetCW}
+However, the learning process is still inconsistent with that of humans, which can incrementally learn from different tasks in different domains and use previous knowledge to help learn new knowledge.
+The PCL aims to obtain better machine intelligence from a never-ending stream of non-iid partial label data.
+One of the key challenges is catastrophic forgetting \citep{IanGoodfellow2013AnEI}, i.e. potential forgetting of old knowledge when learning a new task, which is common in both machines and humans.
+Several state-of-the-art approaches have been addressed to attempt to solve this problem from a different perspective, including three major ideas, which are regularization-based methods \citep{JamesKirkpatrick2016OvercomingCF, ZhizhongLi2016LearningWF}, memory-based methods\citep{SylvestreAlviseRebuffi2016iCaRLIC, ArslanChaudhry2019OnTE, MIR, AmeyaPrabhu2020GDumbAS} and parameter-isolation-based methods\citep{SoochanLee2020AND}.
+
+Despite the promise of CL, the majority of neural networks currently use a supervised learning setting. 
+A large amount of clean annotated data can be time-consuming and expensive, especially for some data that requires expert annotation, such as medical images or protein structure images.
+Indeed, partial labels are widespread and cheap in reality and can be easily obtained through automatic image annotation\citep{ChingHuiChen2017LearningFA} or data mining\citep{JieLuo2010LearningFC}. 
+The most important problem experienced in the training process of PLL is selecting the ground-truth label from the candidate set; a wrong selection may lead to severe ambiguity thus exacerbating the catastrophic forgetting of PCL.
+For example, In Figure \ref{maine} people may incorrectly mistake the Maine Coon for a Norwegian Forest cat or a Siberian cat.
+\begin{figure}[h]
+    \setlength{\abovecaptionskip}{-1.cm}
+    \setlength{\belowcaptionskip}{-0.4cm}
+    \begin{center}
+    \includegraphics[width=3in]{Image/Maine Coon.jpg}
+    \begin{spacing}{0.25}
+
+    \rule[0.3cm]{3in}{0.05em}
+    \end{spacing}
+    A Maine Coon image $x_i$ with
+
+    $Y_i = \{ \text{\underline{Maine Coon}, Norwegian forest, Siberian} \}$
+
+    \rule[1cm]{3in}{0.05em}
+    \end{center}
+    \caption{An input image $x_i$ with a candidate set with ground-truth label ``Maine Coon".}
+    \label{maine}
+\end{figure}
+
+In this work, we assume that the estimator can learn incrementally from a never-ending stream of partial label data. We consider using a memory-based method, as has proved to be effective and trivial to implement in many benchmarks. 
+This method is based on the human learning process inspired by reviewing old tasks following each new task learned\citep{DavidRolnick2018ExperienceRF}.
+We store part of the data from the previous task in a memory buffer and review it by taking the most interfering samples after training the new task, which implies that we choose a subset of the most forgotten samples from the buffer each time\citep{MIR}.
+
+Inspired by contrastive learning, we use the PiCO strategy of label disambiguation based on contrastive learning for representation\citep{HaoboWang2022PiCOCL, KaimingHe2019MomentumCF}.
+Unlike traditional PLL methods, it invokes contrastive learning for representation, alleviating the representation-disambiguation dilemma: uncertainty in sample labels can severely affect the representation of the neural network, which in turn affects the label disambiguation\citep{HaoboWang2022PiCOCL}.
+
+\section{Background}
+In the setting of partial-label continual learning (PCL) task we give the following formal definitions. We consider an image classification task in which all samples come from a never-ending stream of non-iid data, in line with the recent CL literature~\citep{MIR, TimotheLesort2019ContinualLF, ZhedaMai2021OnlineCL}.
+We define the data as a set of unknown distributions $\sD = \{\mathcal{D}_1, \cdots, \mathcal{D}_N \}$ over $\mathcal{X} \times \mathcal{Y}$, where $\mathcal{X}$ is the sample sapce and $\mathcal{Y} = \{1, 2, \cdots, C\}$ is the target label space.
+For each task, we consider the dataset $\mathcal{D} = \{(x_i, Y_i)\}^n_{i=1}$, where each sample contains an image $x_i \in \mathcal{X}$ and a candidate label set $Y_i \subset \mathcal{Y}$.
+As in traditional supervised learning, PCL aims to learn an estimator to classify images. However, the difference is that the partial label of PLL introduces ambiguity into the training process. 
+A common assumption of PLL is that the candidate label set $Y_i$ contains the ground-truth label $y_i$, i.e. $y_i \in Y_i$, which is invisible to the estimator. 
+The PCL algorithm expects to train a new learner at time $t$ with the help of new data $(x_t^i, Y_t^i)$ and the learner at time $t-1$, which $(x_t^i, Y_t^i)$ is a mini-batch that received in the distribution $D_i$ at time $t$, and we define the algorithm in the following structure:
+\begin{equation}
+A^{PCL}_t = \left<f_{t-1}, (x_t, Y_t), M_{t-1}\right> \mapsto \left< f_t, M_t\right>,
+\end{equation}
+where $M_{t}$ is a memory buffer for storing a subset of samples of previous tasks. One of the key challenge of PCL is label disambiguation, which is selecting the ground-truth label from the candidate set. 
+We consider giving each image a normalized pseudo label vector $\boldsymbol{s}_i \in [0, 1]^C$, where each entry represents the probability that the image is predicted to be of a particular class and all entries sum to $1$.
+The pseudo labels will be constantly updated throughout the training process, and ideally, the probability of eventual pseudo-labels might be concentrated on the ground-truth label. 
+We train a classifier $f: \mathcal{X} \rightarrow [0, 1]^C$ using cross-entropy loss, which has the following loss function: 
+\begin{equation}\label{eq1}
+\mathcal{L}_{cls} (f; x_i, Y_i) = \sum^C_{j=1} -s_{i, j}\log(f^j(x_i)) ~~~\text{s.t.}~~~ \sum_{j\in Y_i} s_{i, j} = 1 ~ \text{and} ~ s_{i, j} = 0, \forall j \not\in Y_i,
+\end{equation}
+where $j$ denotes the index of the class and $s_{i,j}$ denotes the probability that the pseudo label predicted sample is of class $j$. $f$ is the softmax output of the classifier and $f^j$ is its $j_{\text{th}}$ entry. 
+\section{Method}
+In this section, we demonstrate a specific method for implementing PCL. We consider the use of a memory-based method to complete the continual learning process\citep{MIR}. An advanced method using contrastive label disambiguation will be used as training for the classifier\citep{HaoboWang2022PiCOCL}. We will describe our method from the perspective of PLL and CL respectively. 
+\subsection{PiCO}
+The ambiguity of the partial labels creates many obstacles to network representation. Inspired by unsupervised learning, PiCO employs a framework of contrastive learning for representation\citep{HaoboWang2022PiCOCL}.
+A combination of contrastive loss and classification loss from \textit{Equation}\ref{eq1} was used to jointly update the neural network.
+The MoCo proposed by \citet{KaimingHe2019MomentumCF} is comparable to supervised learning in many benchmarks and has largely driven the development of unsupervised learning.
+PiCO uses a similar framework to MoCo and achieves SOTA results in the domain of partial label learning. One of the main challenges is the construction of positive set selection.
+
+\subsubsection{PiCO: embedded loss}
+The framework of PiCO and MoCo\citep{KaimingHe2019MomentumCF} is similar in that it aims to provide similar representations for the same class of samples by introducing two identical or approximate networks.
+The approximate network ensures consistency in the input space, and we divide the two networks into a query network $q'(\cdot)$ and a key network $k'(\cdot)$.
+When inputting a sample $x_i$, we perform two different image augmentations on it to obtain a query view $\text{Aug}_q(x_i)$ and a key view $\text{Aug}_k(x_i)$. 
+Then fed into the corresponding network we obtain a set of $L_2$-normalized embedding vectors, i.e. $\boldsymbol{q} = q'(\text{Aug}_q(x_i))$ and $\boldsymbol{k} = k'(\text{Aug}_k(x_i))$.
+PiCO uses the queue data structure to construct the embedding pool, $A = B_q \cup B_k \cup \text{queue}$.
+Where $B_q$ refers to the query views in the current mini-batch and $B_k$ refers to the key views, one of the main benefits of using a queue is that it ensures that the first dequeued samples are the most inconsistent with the feature space in the embedding pool. 
+Contrastive learning uses a dictionary query method where for each input $x$ we compare its query embedding with each entry in the embedding pool and use an improved InfoNCE-based supervised contrastive loss\citep{PrannayKhosla2020SupervisedCL, AaronvandenOord2018RepresentationLW}:
+\begin{equation}
+    \mathcal{L}_{\text{cont}}(q;\bm{x}, \tau, A) = -\frac{1}{|P(\boldsymbol{x})|} \sum_{\boldsymbol{k}_+\in P(\boldsymbol{x})}\log \frac{\exp(\boldsymbol{q}^\top\boldsymbol{x}_+ / \tau)}{\sum_{\boldsymbol{k}'\in A(\boldsymbol{x})}\exp(\boldsymbol{q}^\top \boldsymbol{k}' / \tau)},
+\end{equation}
+where $P(\boldsymbol{x})$ is a positive set, $A(\boldsymbol{x}) = A \setminus \{\boldsymbol{q}\}$ and $\tau$ is a temperature parameter $\ge 0$.
+Finally, we share the convolutional layer with the query network and add an extra fully-connected mapping to the classifier for prediction. 
+
+\subsubsection{PiCO: Positive set selection}
+In contrastive learning the construction of a positive set is essential. The accuracy of the positive set greatly affects the representational effect on contrastive learning. Unlike MoCo and many other contrastive learning algorithms that use various pretext tasks, PiCO constructs positive sets $P(\boldsymbol{x})$ directly using the predictions of the classifier\citep{KaimingHe2019MomentumCF,MangYe2019UnsupervisedEL}.
+Given a sample $x$ we use the classifier to predict the class of the sample, $\tilde{y} = \argmax_{j\in Y} f^j(\text{Aug}_q(\boldsymbol{x}))$, and construct the positive set:
+\begin{equation}
+    P(\boldsymbol{x}) = \{k' \mid k' \in A(\boldsymbol{x}), \tilde{y}' = \tilde{y} \},
+\end{equation}
+where $k'$ is the sample in the embedding pool and $\tilde{y}'$ is the prediction of the classifier for $k'$.
+We restrict the prediction of sample $\boldsymbol{x}$ to the candidate set to ensure compliance with the assumption.
+This strategy is simple and easy to implement, but our experiments have shown its effectiveness. Some more sophisticated methods using the threshold have also been widely used in the semi-supervised domain, maximise $f^j(\text{Aug}_q(\boldsymbol{x})) \le \delta ~(\delta = 0.95)$\citep{KihyukSohn2022FixMatchSS}.
+With a good positive set, we can then update the query network using a combination of classification loss and contrastive loss,
+\begin{equation}
+    \mathcal{L} = \mathcal{L}_{\text{cls}} + \lambda\mathcal{L}_{\text{cont}},
+\end{equation}
+where $\lambda \in [0, 1]$ is a loss weight. We update the key network slowly using a momentum method, which ensures that the features in the embedding pool are as consistent as possible.
+$\theta_k = m\cdot\theta_{k-1} + (1-m)\cdot \theta_q$, usually we set the momentum parameter large enough, e.g. $m = 0.9999 \mid m \in [0, 1)$, to ensure that the query network does not affect the key network too much.
+Misclassification of the positive set can significantly affect the representation of contrastive learning, and PiCO uses a prototype-based disambiguation strategy that can effectively suppress the probability of false positive samples.\citep{HaoboWang2022PiCOCL}.
+
+\subsubsection{PiCO: Prototype-based label disambiguation}
+Contrastive learning aims to achieve a similar effect to clustering by constructing the correct positive sets which bring samples of the same class closer together in feature space and maximise the distance between different classes.
+To this end, PiCO proposes a novel prototype-based method that maintains a prototype embedding vector $\mu_c$ for each class $c \in \{1, 2, \cdots, C\}$.
+Where each prototype can represent the embedding vector of a set of samples, i.e. the centroids in the clustering. 
+If an accurate prototype is available, the naive idea is to directly select the closest prototype embedding output. Indeed, the prototype embedding vector has limited information at the beginning of training. PiCO uses a moving-average strategy to gradually update the pseudo label vector and the prototype vector. 
+\subsubsection*{\textbf{Pseudo label updating}}
+A moving-average mechanism is used to update the pseudo-labels. At the beginning of training, we initialise the prototype embedding vector as a zero vector $\mu_c = [0]^C$ and the pseudo-labels as a uniform vector $s_j = \frac{1}{|Y|} \sI (j \in Y)$,
+where we restrict $j$ to the candidate set to ensure that samples outside the candidate set do not interfere with the prediction.
+We update the pseudo-label using the following strategy:
+\begin{equation}
+    \boldsymbol{s} = \phi \boldsymbol{s} + (1 - \phi) z, ~~~ z_c = 
+    \begin{cases}
+        1 & \text{ if } c = \argmax_{j\in Y} \boldsymbol{q}^\top \boldsymbol{\mu}_j \\
+        0 & \text{ else } 
+    \end{cases},
+\end{equation}
+where $\phi \in (0, 1)$ is a weight parameter, which controls the rate of updating of pseudo-labels. 
+$\boldsymbol{\mu}_j$ refers to the prototype embedding vector of class $j$, and $\boldsymbol{q}^\top \boldsymbol{\mu}_j$ refers to the projection distances between the query view and the prototype.
+$\boldsymbol{s}$ is intended to be updated in the direction of the closest prototype, and in general, we use a small $\phi$ for slow updating since intuitively the prototype embedding at the initial stage is not reliable. 
+
+
+\subsubsection*{\textbf{Prototype Updating}}
+The most straightforward method is that for each epoch we compute centroids for each class of samples, but this leads to an extra computational toll that might be unacceptable. In addition, the accuracy of the sample prediction can severely affect the update of the prototype. For this reason, PiCO proposes to use the moving-average strategy again to update the prototype embedding vector.:
+\begin{equation}
+    \boldsymbol{\mu}_c = \text{Normalize}(\gamma \boldsymbol{\mu}_c + (1-\gamma)\boldsymbol{q}), ~~~ \text{if } c = \argmax_{j\in Y} f^j(\text{Aug}_q(\boldsymbol{x})),
+\end{equation}
+where $\gamma$ is a momentum parameter. 
+When a sample $\boldsymbol{x}$ is predicted as category $c$, we update the prototype embedding vector along the direction of the query view of $\boldsymbol{x}$. The use of normalisation is intended to be consistent with the embedding pool for contrastive learning. 
+
+The subtlety of PiCO lies in the fact that contrastive learning and prototype-based label disambiguation strategy can mutually work together. The use of contrastive learning brings a clustering effect to the feature space, which is effective in helping to obtain accurate prototype embeddings. More accurate prototypes can help the classifier to make better predictions. An accurate prediction can in turn contribute to more accurate positive sets for the contrastive learning module, which can help contrastive learning to obtain a more accurate representation. 
+
+\subsection{MIR}
+After we have solved the training of the partial label learning task, we need to consider how PCL can avoid catastrophic forgetting in the presence of class increment.
+In the PCL setting, we obtain a set of data $(\boldsymbol{x}_t^i, Y_t^i)$ at time $t$ from an never-ending stream of data in a new domain $\mathcal{D}_t$. 
+$\mathcal{D}_t$ can be a different non-iid domain from $\mathcal{D}_{t-1}$ or it can be identical. 
+We aim to train a classifier $f$ with parameters $\theta$ which minimizes the loss $\mathcal{L}$ of the current samples and wishes to preserve the loss of past samples as unaffected as possible. 
+Many studies have been conducted in the last few years to demonstrate that repeated training of partial samples from past tasks can prevent catastrophic forgetting to some extent\citep{ArslanChaudhry2019OnTE,RahafAljundi2019GradientBS,DavidLopezPaz2017GradientEM, ArslanChaudhry2019ContinualLW}.
+An intuitive idea is that we can store some of the samples from the past and then randomly select a portion to retrain each time we train a new task. MIR selects the part of the memory buffer that has maximum interference with the loss for retraining\citep{RahafAljundi2019GradientBS}. 
+A key idea of this criterion is that some past samples might have almost no effect on the model.
+An intuitive understanding is that, like humans, machines need to review the most forgotten knowledge.
+
+We consider a classical experience replay (ER) algorithm, which has been shown to be effective in many studies\citep{ArslanChaudhry2019ContinualLW}.
+We first construct a finite-size memory buffer $\mathcal{M}$. When we finish training task $t$, we randomly draw a fixed number of samples into the buffer. Some other algorithms also provide strategies for adding samples into the buffer, such as weighting the samples\citep{RahafAljundi2019GradientBS,GTSperl2016iCaRLIC}.
+When we receive a mini-batch of $\boldsymbol{x}_t^i$, the objective is to obtain the least loss parameter $\min_\theta \mathcal{L}(f_\theta(\boldsymbol{x}_t^i), Y_t^i)$.
+For this purpose, we first calculate the possible parameters under the current batch, $\theta^v = \theta - \alpha \nabla \mathcal{L}(f_\theta(\boldsymbol{x}_t^i), Y_t^i)$, where $\alpha$ is the learning rate.
+We then select the top-$k$ samples of maximum interference, $\boldsymbol{x} \in \mathcal{M}$, using the following criterion:
+\begin{equation}
+    s_{MI-1}(\boldsymbol{x}) = \mathcal{L}(f_{\theta^v}(\boldsymbol{x}), Y) - \mathcal{L}(f_{\theta}(\boldsymbol{x}), Y).
+\end{equation}
+In addition to the maximum interference samples in the memory buffer, we can also consider the global maximum interference samples. 
+We additionally store the minimum loss $\mathcal{L}(f_\theta(\boldsymbol{x}), Y)$ in the memory, denoted $\mathcal{L}(f_{\theta^*}(\boldsymbol{x}), Y)$.
+Then we can use this criterion instead:
+\begin{equation}
+    s_{MI-2}(\boldsymbol{x}) = \mathcal{L}(f_{\theta^v}(\boldsymbol{x}), Y) - \min(\mathcal{L}(f_\theta (\boldsymbol{x}), Y), \mathcal{L}(f_{\theta^*}(\boldsymbol{x}), Y)).
+\end{equation}
+Some experiments have shown that the larger buffer size is more effective, but with the attendant large computational toll\citep{MIR}. 
+To this end, we consider first sampling a random budget $\mathcal{B}$ from the memory buffer and then rehearsal $k$ samples from $\mathcal{B}$ according to the criterion.
+
+\section{Experiments}
+\subsection{Setup}
+Our experiment uses a widely used dataset, CIFAR10\citep{AlexKrizhevsky2009LearningML}, which in order to satisfy the CL setting we split into 5 disjoint tasks, each with 2 classes\citep{RahafAljundi2019OnlineCL}. 
+Since we are using a memory-based algorithm, we set the memory buffer size $n(\mathcal{M}) = 500$ and the budget size $n(\mathcal{B}) = 50$, and for each step, we select the same size samples from the buffer as the training batch.
+Each of these tasks contains 9,750 training samples and 250 validation samples and keeps the identical PLL setting as in previous work\citep{HongweiWen2021LeveragedWL}.
+We generate false positive samples according to a fixed flipping probability $q = P(\bar{y} \in Y \mid \bar{y} \ne y)$, i.e. all non-ground-truth labels have the same flipping probability.
+We then combine all the false positive labels with the ground-truth label to construct the candidate set.
+In our experiments, we took a flipping probability of $q = 0.3$ and the average number of labels in the candidate set was $3.7018$.
+
+We compared the performance of five classical CL algorithms on Split CIFAR10:
+1) \textbf{ER-MIR}\citep{MIR} is a fully supervised MIR algorithm based on rehearsal method;
+2) \textbf{iCaRL}\citep{GTSperl2016iCaRLIC} uses a nearest-class-mean classifier and knowledge distillation loss to decouple representation and classification;
+3) \textbf{GEM}\citep{DavidLopezPaz2017GradientEM} uses a smart way of combining the gradients of old and new tasks to update the network together;
+4) \textbf{GSS}\citep{RahafAljundi2019GradientBS} gives a score to each sample in the memory buffer and keeps the lower scores when the buffer is full;
+5) \textbf{Naive} retrains a fixed number of random samples directly from the memory buffer.
+
+\subsection{main expirical results}
+\begin{table}[t]
+    \caption{Comparison of the average accuracy of different algorithms in Split CIFAR10}
+    \label{table1}
+    \begin{center}
+        \begin{tabular}{|c|c|c|c|c|c|c|}
+        \hline
+        \textbf{MATHOD} & \textbf{T1} & \textbf{T2} & \textbf{T3} & \textbf{T4} & \textbf{T5} & \textbf{AVERAGE}\\
+        \hline
+        Navie & 0.03 & 0.08 & 0.04 & 0.15 & 0.93 & 0.246 \\
+        \hline
+        ER-MIR & 0.07 & 0.17 & 0.00 & 0.14 & 0.90 & 0.256 \\
+        \hline
+        iCaRL & 0.21 & 0.12 & 0.11 & 0.17 & 0.35 & 0.192 \\
+        \hline
+        GEM & 0.00 & 0.01 & 0.02 & 0.07 & 0.91 & 0.202 \\
+        \hline
+        GSS & 0.06 & 0.05 & 0.20 & 0.65 & 0.92 & 0.376 \\
+        \hline
+        PCL-10(\underline{ours}) & 0.04 & 0.01 & 0.02 & 0.15 & 0.75 & 0.194 \\
+        \hline
+        PCL-24(\underline{ours}) & 0.32 & 0.21 & 0.35 & 0.46 & 0.54 & \textbf{0.376} \\
+        \hline
+        \end{tabular}
+    \end{center}
+\end{table}
+We used two different batch sizes for our experiments, respectively $10$ and $24$. From Table \ref{table1}, we can see that PCL has approximated the results of the fully supervised learning algorithm to some extent. PCL-24 achieves \textbf{SOTA} levels among the five benchmark algorithms. Despite the additional computational toll that partial label imposes on CL, we believe that increasing the size of the memory buffer and batch size will result in better performance. 
+
+\section{Related Works}
+\textbf{Continual learning} (CL), also known as lifelong learning or class-incremental learning, allows the same model to incrementally learn new tasks or add new classes.
+Some regularisation-based methods use a weighting of the neurons of a neural network, making some of the neurons more sensitive to a specific task\citep{JamesKirkpatrick2016OvercomingCF}.
+\citet{ZhizhongLi2016LearningWF} propose to preserve the old knowledge from the previous tasks by using knowledge distillation\citep{GeoffreyEHinton2015DistillingTK}. However, this method is more dependent on the relevance between tasks.
+Most of the memory-based methods store a subset of the data through a buffer or use a generative network to reconstruct the old data, and the different algorithms mainly focus on designing the criteria for adding and removing from the buffer\citep{MIR, RahafAljundi2019GradientBS}.
+The dynamic architecture methods can expand dynamically based on the representation of new tasks by neurons, and adjust the network architecture when the current neurons are insufficient to represent new tasks\citep{SoochanLee2020AND, JaehongYoon2017LifelongLW}. 
+
+\textbf{Partial label learning} (PLL) task assumes that the candidate set comprises a ground-truth label and helps the network to converge through different disambiguation strategies.
+Some intuitive average-based methods aim to treat all labels in a candidate set equally, using the average of the model's output of all candidate labels as a prediction\citep{EykeHllermeier2005LearningFA, JiaqiLv2020ProgressiveIO, TimotheeCour2011LearningFP}.
+Some identification-based methods also receiving widespread attention in recent years, which treat the ground-truth label in a candidate set as a latent variable and constantly identify this latent variable to disambiguate.
+These include methods based on the maximum likelihood criterion\citep{RongJin2002LearningWM}, graph-based methods\citep{MinLingZhang2016PartialLL, GengyuLyu2019GMPLLGM} or methods based on class activation values\citep{FeiZhang2022EXPLOITINGCA}. 
+
+\section{Future Work}
+Our work demonstrates the possibilities of weak-supervised in continual learning. In future work, we wish to explore more different applications of weak-supervised learning tasks or unsupervised learning to continual learning and to theoretically prove the convergence of weak-supervised continual learning. We believe that this new learning paradigm can be easily extended to more computer vision tasks, such as object detection or semantic segmentation.
+
+\section{Discussion \& Conclusion}
+In this work, we propose partial-label continual learning, which is a new paradigm for weak-supervised continual learning. The experiments show that continual learning scalability on partial label tasks is possible and competitive with fully supervised continual learning on many benchmarks. A good weak-supervised learning representation can help reduce catastrophic forgetting, and a good continuous learning strategy can in turn help label disambiguation. However, weak-supervised tasks also bring an unavoidable drawback to continual learning: for an online (potentially infinite) stream of data partial label learning increases severely the training time, and how to reduce the training time is crucial. 
+
+\section*{Acknowledgements}
+The authors acknowledge Professors Tongliang Liu and Lei Feng for their helpful tutoring and support throughout. The authors acknowledge the Sydney Informatics Hub and the University of Sydney’s high performance computing cluster, Artemis, for providing the computing resources that have contributed to the results reported herein.
+Acknowledgements also thanks for GPUs support from \url{AutoDL.com}, which focus on providing various professional and economical hardware solutions for deep learning research.
+
+\newpage 
+\bibliography{iclr2022_conference}
+\bibliographystyle{iclr2022_conference}
+
+\newpage
+\appendix
+\section{PCL Algorithm}
+\begin{algorithm}[ht!]
+    \renewcommand{\algorithmicrequire}{\textbf{Input:}}
+    \caption{Partial-label Continual Learning Algorithm (start from second task)}
+    \begin{algorithmic}[1]
+        \Require Training dataset $\mathcal{D}_t$, classifier $f$, query network $q'$, key network $k'$, momentum queue, pseudo-labels $\boldsymbol{s}_i$ of $\boldsymbol{x}_i$ in $\mathcal{D}_t$, prototype embeddings $\boldsymbol{\mu}_j ~ (1 \le j \le C)$, Memory buffer $\mathcal{M}$, subset size $\mathcal{N}$, Budget $\mathcal{B}$, learning rate $\alpha$
+        \For{$t \in 1 \cdots T$}
+            \For{$epoch = 1, 2, \cdots,$}
+                \State // a mini-batch $B_i$ from $D_t$
+                \State //would-be parameters
+                \State $\theta^w \leftarrow SGD(B_i, \alpha)$
+                \State // randomly select $\mathcal{N}$ samples from $\mathcal{M}$
+                \State $B_\mathcal{N} \sim \mathcal{M}$
+                \State // sort $B_\mathcal{N}$ based on MIR criteria
+                \State $S \leftarrow sort(s_{MI}(B_\mathcal{N}))$
+                \State $B_{\mathcal{M}_\mathcal{N}} \leftarrow \{S_i\}^\mathcal{B}_{i=1}$ 
+                \State $B = B_i \cup B_{\mathcal{M}_\mathcal{N}}$
+                \State // get query and key embedding
+                \State $B_q = \{\boldsymbol{q}_i = q'(\text{Aug}_q(\boldsymbol{x}_i)) \mid \boldsymbol{x}_i \in B\}$
+                \State $B_k = \{\boldsymbol{k}_i = k'(\text{Aug}_k(\boldsymbol{x}_i)) \mid \boldsymbol{x}_i \in B\}$
+                \State $A = B_q \cup B_k \cup \text{queue}$
+                \For{ $\boldsymbol{x}_i \in B$ }
+                    \State // get the prediction 
+                    \State $\tilde{y}_i = \argmax_{j\in Y_i} f^j(\text{Aug}_q(\boldsymbol{x}_i))$
+                    \State // update prototype
+                    \State $\boldsymbol{\mu}_c = \text{Normalize}(\gamma\boldsymbol{\mu}_c + (1-\gamma)\boldsymbol{q}_i)$, if $\tilde{y}_i = c$
+                    \State // construct positive set
+                    \State $P(\boldsymbol{x}_i) = \{ \boldsymbol{k}' \mid \boldsymbol{k}' \in A(\boldsymbol{x}_i), \tilde{y}' = \tilde{y}_i \}$
+                \EndFor
+                \State // update pesudo-labels
+                \For{$\boldsymbol{q}_i \in B_q$}
+                    \State $\boldsymbol{z}_i = \text{OneHot}(\argmax_{j \in Y_i}\boldsymbol{q}_i^\top\boldsymbol{\mu}_j)$
+                    \State $\boldsymbol{s}_i = \phi \boldsymbol{s}_i + (1 + \phi)\boldsymbol{z}_i$
+                \EndFor
+                \State // Contrastive loss
+                \State $\mathcal{L}_{\text{cont}}(q;\tau, A) = \frac{1}{|B_q|}\sum_{\boldsymbol{q_i}\in B_q}\Big \{-\frac{1}{|P(\boldsymbol{x}_i)|} \sum_{\boldsymbol{k}_+\in P(\boldsymbol{x}_i)}\log \frac{\exp(\boldsymbol{q}^\top\boldsymbol{k}_+ / \tau)}{\sum_{\boldsymbol{k}'\in A(\boldsymbol{x}_i)}\exp(\boldsymbol{q}^\top \boldsymbol{k}' / \tau)}\Big \}$
+
+                \State // Classification loss
+                \State $\mathcal{L}_{\text{cls}}(f;B) = \frac{1}{|B|} \sum_{x_i \in B}\sum_{j=1}^C -s_{i, j} \log(f^j(\text{Aug}_q(\boldsymbol{x}_i)))$
+                \State minimize loss $\mathcal{L} = \mathcal{L}_{\text{cls}} + \lambda\mathcal{L}_{\text{cont}}$
+                \State momentum update $k'$ by using $q'$
+                \State enqueue $B_k$ and classifier predictions and dequeue
+            \EndFor
+            \State $M \leftarrow UpdateMemory(B_i)$
+        \EndFor
+    \end{algorithmic}
+\end{algorithm}
+
+\newpage
+\section{Algorithm Comparison}
+\begin{figure}[h]
+    \begin{center}
+    \includegraphics[width=5.5in]{Image/comparison.png}
+    \end{center}
+\end{figure}
+
+\end{document}
