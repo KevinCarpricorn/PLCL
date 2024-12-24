@@ -17,7 +17,7 @@ PLCL (Partial-Label Continual Learning) is a research project focusing on addres
   - `model.py` & `resnet.py`: Define the model architecture and backbone network.
   - `experiment.py`: Experimental script for training and evaluation.
 - **Utilities**:
-  - `utils/`: Tools for loging and auxiliary algorithms.
+  - `utils/`: Tools for logging and auxiliary algorithms.
 - **Documentation**:
   - `report.pdf`: Detailed project report.
 
